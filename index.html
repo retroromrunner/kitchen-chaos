@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Kitchen Chaos</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#2b1a12;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff}
+  body{display:flex;justify-content:center;height:100vh;height:100dvh}
+  #app{width:100%;max-width:480px;height:100vh;height:100dvh;background:linear-gradient(180deg,#ff9a3c 0%,#ff6b35 45%,#c0392b 100%);display:flex;flex-direction:column;padding:0;position:relative;overflow:hidden}
+  h1{margin:2px 0 0;text-align:center;font-size:34px;letter-spacing:1px;text-shadow:0 3px 0 rgba(0,0,0,.25)}
+  .sub{text-align:center;opacity:.95;font-size:14px;margin:2px 0 8px}
+  /* Arcade overlay HUD: floats over the full-screen play field */
+  #topOverlay{position:absolute;top:0;left:0;right:0;z-index:6;pointer-events:none;padding:8px 10px 0}
+  #hud{display:flex;gap:6px;margin:0}
+  .stat{flex:1;background:transparent;border:0;border-radius:0;padding:5px 4px;text-align:center;text-shadow:0 2px 3px rgba(0,0,0,.6)}
+  .stat b{display:block;font-size:19px;line-height:1}
+  .stat span{font-size:10px;text-transform:uppercase;letter-spacing:.5px;opacity:.9}
+  #pauseBtn{pointer-events:auto;flex:0 0 auto;width:44px;border:0;border-radius:0;background:transparent;color:#fff;font-size:18px;cursor:pointer;text-shadow:0 2px 3px rgba(0,0,0,.6)}
+  #timebar{height:10px;background:rgba(0,0,0,.45);border-radius:99px;overflow:hidden;margin:6px 0}
+  #timefill{height:100%;width:100%;background:#37d67a;border-radius:99px;transition:width .2s linear}
+  #timefill.low{background:#ff2d55}
+  /* Time colour stages — number and bar stay in sync (see updateHud):
+     green >50%, yellow 33-50%, orange 15-33%, red <15% of the 60s round. */
+  #timefill.stage-green{background:#37d67a}
+  #timefill.stage-yellow{background:#ffe259}
+  #timefill.stage-orange{background:#ff9f1c}
+  #timefill.stage-red{background:#ff2d55}
+  #timer.stage-green{color:#7dff8a}
+  #timer.stage-yellow{color:#ffe259}
+  #timer.stage-orange{color:#ff9f1c}
+  #timer.stage-red{color:#ff5b5b}
+  #order{background:transparent;border:0;color:#fff;border-radius:0;padding:8px;text-align:center;box-shadow:none;text-shadow:0 2px 4px rgba(0,0,0,.65)}
+  #order .dish{font-size:38px;line-height:1;filter:drop-shadow(0 3px 3px rgba(0,0,0,.5))}
+  #order h2{margin:2px 0 4px;font-size:18px}
+  #steps{display:flex;gap:5px;justify-content:center;flex-wrap:wrap}
+  .step{background:transparent;border:0;border-radius:0;padding:4px 6px;font-size:13px;text-shadow:0 2px 3px rgba(0,0,0,.65)}
+  .step.done{background:transparent;border:0;opacity:.6;text-decoration:line-through}
+  .step.next{border:0;box-shadow:none;color:#ffe259;font-weight:800}
+  #msg{min-height:22px;text-align:center;font-weight:700;font-size:14px;margin:6px 0 0;text-shadow:0 2px 0 rgba(0,0,0,.35)}
+  #msg.bin{color:#ffd6d6}
+  /* Falling-ingredient field (Fruit Ninja style) — bare emoji, no disc, no label */
+  #field{position:relative;flex:1;min-height:0;border-radius:0;overflow:hidden;background:linear-gradient(180deg,rgba(0,0,0,.28),rgba(0,0,0,.12));touch-action:none;user-select:none;-webkit-user-select:none}
+  #fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5}
+  .fall{position:absolute;width:76px;height:76px;margin-left:-38px;background:transparent;border:0;cursor:default;display:flex;align-items:center;justify-content:center;touch-action:none;will-change:transform;pointer-events:none}
+  .fall .em{font-size:56px;line-height:1;filter:drop-shadow(0 3px 3px rgba(0,0,0,.45))}
+  .fall.gone{opacity:0;transform:scale(1.4);transition:opacity .12s,transform .12s}
+  .half{position:absolute;font-size:34px;line-height:1;pointer-events:none;z-index:4;filter:drop-shadow(0 2px 2px rgba(0,0,0,.4))}
+  #bin{position:absolute;left:0;right:0;bottom:6px;z-index:6;font-size:36px;text-align:center;pointer-events:none;opacity:.9}
+  /* Tap-to-start prompt: NO overlay screen — the live game view IS the
+     start screen. Transparent text floating over the falling items. */
+  #tapStart{position:absolute;left:0;right:0;top:38%;z-index:7;text-align:center;pointer-events:none;text-shadow:0 3px 6px rgba(0,0,0,.65)}
+  #tapStart .tapTitle{font-size:40px;font-weight:800;letter-spacing:1px}
+  #tapStart .tapBig{font-size:24px;font-weight:800;color:#ffe259;margin:14px 0 8px;animation:pulse 1.2s ease-in-out infinite}
+  #tapStart .tapSub{font-size:14px;line-height:1.5;opacity:.95}
+  @keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.07);opacity:.85}}
+  #bin.binned{animation:binshake .4s}
+  @keyframes binshake{25%{transform:rotate(-8deg)}75%{transform:rotate(8deg)}}
+  .row{display:flex;gap:10px;margin-top:12px}
+  button.big{flex:1;border:0;border-radius:14px;padding:14px;font-size:18px;font-weight:800;cursor:pointer;background:#fff;color:#c0392b;box-shadow:0 4px 0 rgba(0,0,0,.25)}
+  button.big.gold{background:#ffe259;color:#3a2317}
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10}
+  .card{background:#fff8ec;color:#3a2317;border-radius:20px;padding:22px;max-width:420px;width:100%;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+  .card h2{margin:0 0 8px;font-size:28px}
+  .card p{margin:8px 0;line-height:1.45}
+  .card .big{width:100%;margin-top:12px}
+  .hidden{display:none!important}
+  #results p{font-size:18px;margin:6px 0}
+  #results b{font-size:26px}
+  .tiny{font-size:12px;opacity:.7;text-align:center;margin-top:10px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="field">
+    <canvas id="fx"></canvas>
+    <div id="topOverlay">
+      <div id="hud">
+        <div class="stat"><b id="score">0</b><span>Score</span></div>
+        <div class="stat"><b id="timer">60</b><span>Seconds</span></div>
+        <div class="stat"><b id="combo">x1</b><span>Combo</span></div>
+        <div class="stat"><b id="orders">0</b><span>Orders</span></div>
+        <button id="pauseBtn" type="button" aria-label="Pause">⏸</button>
+      </div>
+      <div id="timebar"><div id="timefill"></div></div>
+      <div id="order">
+        <div class="dish" id="dishEmoji">🍔</div>
+        <h2 id="dishName">Burger</h2>
+        <div id="steps"></div>
+      </div>
+      <div id="msg"></div>
+    </div>
+    <div id="tapStart">
+      <div class="tapTitle">🍳 Kitchen Chaos</div>
+      <div class="tapBig">👆 TAP TO START</div>
+      <div class="tapSub">60 seconds · finish an order +2s · wrong ingredient goes in the bin</div>
+    </div>
+    <div id="bin">🗑️</div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="pauseScreen">
+  <div class="card">
+    <h2>⏸ Paused</h2>
+    <p>The orders are getting cold…</p>
+    <button class="big gold" id="resumeBtn" type="button">▶ Resume</button>
+    <button class="big" id="pauseRestartBtn" type="button">↻ Restart</button>
+  </div>
+</div>
+
+<div class="overlay hidden" id="endScreen">
+  <div class="card" id="results">
+    <h2>⏰ Time&rsquo;s up!</h2>
+    <p>Score: <b id="finalScore">0</b></p>
+    <p>Orders served: <b id="finalOrders">0</b></p>
+    <p>Best combo: <b id="finalCombo">x1</b></p>
+    <p>Accuracy: <b id="finalAcc">0%</b></p>
+    <p>Grade: <b id="finalGrade">C</b></p>
+    <button class="big gold" id="againBtn" type="button">↻ Cook again!</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+const DISHES = [
+  {name:"Classic Burger", emoji:"🍔", steps:["bun","patty","cheese"]},
+  {name:"Cheesy Pizza", emoji:"🍕", steps:["dough","sauce","cheese"]},
+  {name:"Garden Salad", emoji:"🥗", steps:["lettuce","tomato","cucumber"]},
+  {name:"Street Taco", emoji:"🌮", steps:["shell","beef","salsa"]},
+  {name:"Midnight Pasta", emoji:"🍝", steps:["pasta","sauce","cheese"]},
+  {name:"Breakfast Sarnie", emoji:"🥪", steps:["bun","egg","bacon"]},
+];
+const ING = {
+  bun:{e:"🍞",label:"Bun"}, patty:{e:"🍔",label:"Patty"}, cheese:{e:"🧀",label:"Cheese"},
+  dough:{e:"🫓",label:"Dough"}, sauce:{e:"🥫",label:"Sauce"}, lettuce:{e:"🥬",label:"Lettuce"},
+  tomato:{e:"🍅",label:"Tomato"}, cucumber:{e:"🥒",label:"Cucumber"}, shell:{e:"🫔",label:"Shell"},
+  beef:{e:"🍖",label:"Beef"}, salsa:{e:"🌶️",label:"Salsa"}, pasta:{e:"🍜",label:"Pasta"},
+  egg:{e:"🍳",label:"Egg"}, bacon:{e:"🥓",label:"Bacon"},
+};
+const ALL_INGS = Object.keys(ING);
+
+let audioCtx = null;
+let noiseBuf = null;
+// Audio unlock (Nov 12): Cori confirmed sound IS there — it was not broken.
+// ensureAudio() is kept as the robust iOS unlock: on iOS Safari a new
+// AudioContext can start "suspended", so this creates the context AND
+// resumes it, and is called from every user gesture (tap-to-start, first
+// swipe pointerdown, pause / resume) and from beep()/noise() before
+// scheduling anything. All sound calls fail soft if audio is unavailable.
+function ensureAudio(){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state === "suspended") audioCtx.resume();
+  }catch(e){}
+  return audioCtx;
+}
+function getNoiseBuf(){
+  if(noiseBuf) return noiseBuf;
+  const len = Math.floor(audioCtx.sampleRate * 0.5);
+  noiseBuf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for(let i=0;i<len;i++) d[i] = Math.random()*2 - 1;
+  return noiseBuf;
+}
+function beep(freq, dur, type, vol, when){
+  try{
+    ensureAudio();
+    const t = audioCtx.currentTime + (when||0);
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type||"sine"; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(vol||0.15, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t); o.stop(t+dur+0.02);
+  }catch(e){}
+}
+// Short filtered-noise burst. filterType/freq/freqEnd/dur/vol shape the sound.
+function noiseHit(dur, filterType, freq, freqEnd, vol, when){
+  try{
+    ensureAudio();
+    const t = audioCtx.currentTime + (when||0);
+    const src = audioCtx.createBufferSource();
+    src.buffer = getNoiseBuf(); src.loop = true;
+    const f = audioCtx.createBiquadFilter();
+    f.type = filterType; f.frequency.setValueAtTime(freq, t);
+    if(freqEnd) f.frequency.exponentialRampToValueAtTime(freqEnd, t+dur);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(vol||0.25, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+    src.connect(f); f.connect(g); g.connect(audioCtx.destination);
+    src.start(t); src.stop(t+dur+0.02);
+  }catch(e){}
+}
+// Pitch-slide oscillator (for chomps / thuds).
+function slideOsc(fFrom, fTo, dur, type, vol, when){
+  try{
+    ensureAudio();
+    const t = audioCtx.currentTime + (when||0);
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type||"sine";
+    o.frequency.setValueAtTime(fFrom, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(1,fTo), t+dur);
+    g.gain.setValueAtTime(vol||0.2, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t); o.stop(t+dur+0.02);
+  }catch(e){}
+}
+const sfx = {
+  pop(){ beep(660,0.09,"triangle",0.2); beep(880,0.08,"triangle",0.15,0.05); },
+  // SLASH: airy whoosh on every cut — band-passed noise sweeping down.
+  slash(){ noiseHit(0.18, "bandpass", 3200, 350, 0.30); },
+  // CORRECT: bigger, more celebratory — sharp crunch/chomp, then a
+  // bright rising chime arpeggio and a juicy sparkle tail.
+  crunch(){
+    noiseHit(0.12, "lowpass", 900, 300, 0.5);
+    noiseHit(0.07, "highpass", 2500, 4000, 0.18, 0.01);
+    slideOsc(320, 70, 0.10, "square", 0.22);
+    beep(920, 0.07, "triangle", 0.22, 0.02);
+    // Second crunch bite, slightly later.
+    noiseHit(0.10, "lowpass", 1100, 350, 0.4, 0.06);
+    slideOsc(420, 90, 0.09, "square", 0.18, 0.06);
+    // Rising chime: C6-E6-G6-C7, bright and celebratory.
+    [1047, 1319, 1568, 2093].forEach((f,i)=>beep(f, 0.14, "triangle", 0.22, 0.08 + i*0.045));
+    // Sparkle tail: high shimmering pops.
+    beep(2637, 0.09, "sine", 0.12, 0.24);
+    beep(3136, 0.12, "sine", 0.10, 0.30);
+  },
+  // WRONG: satisfying low thud + descending buzz — reads as "wrong"
+  // without being harsh. Replaces the old thin two-note sawtooth.
+  wrong(){
+    slideOsc(220, 85, 0.35, "sawtooth", 0.20);
+    slideOsc(110, 45, 0.28, "sine", 0.35);
+    noiseHit(0.15, "lowpass", 400, 120, 0.22, 0.02);
+  },
+  done(){ [523,659,784,1047].forEach((f,i)=>beep(f,0.12,"triangle",0.18,i*0.07)); },
+  tick(){ beep(1000,0.05,"square",0.06); }
+};
+
+let state = null;
+const field = document.getElementById("field");
+
+// PERSISTENT FIELD: the falling field is continuous across orders.
+// newOrder() NEVER clears falling items — they keep gliding down, and new
+// items spawn on top. Only the collected/binned item itself is removed.
+// resetIngredientState() now only strips any leftover wrong/correct classes
+// from items still falling (defensive; collected items are removed outright).
+function resetIngredientState(){
+  field.querySelectorAll(".wrong,.correct").forEach(el=>el.classList.remove("wrong","correct"));
+  const bin = document.getElementById("bin");
+  bin.classList.remove("binned");
+}
+function clearField(){
+  if(state) state.falling = [];
+  field.querySelectorAll(".fall,.half").forEach(el=>el.remove());
+  resetIngredientState();
+}
+
+function newOrder(){
+  resetIngredientState(); // field keeps falling; nothing is erased
+  let d;
+  do { d = DISHES[Math.floor(Math.random()*DISHES.length)]; }
+  while (state && state.dish && d.name === state.dish.name);
+  state.dish = d; state.step = 0;
+  document.getElementById("dishEmoji").textContent = d.emoji;
+  document.getElementById("dishName").textContent = d.name;
+  renderSteps();
+  // Seed the field so the first needed ingredient is findable right away.
+  if((state.running || state.attract) && !state.paused){ spawnItem(state.dish.steps[0]); state.spawnIn = 500; }
+}
+function renderSteps(){
+  const el = document.getElementById("steps");
+  el.innerHTML = "";
+  state.dish.steps.forEach((s,i)=>{
+    const div = document.createElement("div");
+    div.className = "step" + (i < state.step ? " done" : i === state.step ? " next" : "");
+    div.textContent = (i < state.step ? "✓ " : "") + ING[s].e + " " + ING[s].label;
+    el.appendChild(div);
+  });
+}
+function setMsg(t, bin){
+  const m = document.getElementById("msg");
+  m.textContent = t; m.className = bin ? "bin" : "";
+  m.id = "msg";
+}
+function updateHud(){
+  document.getElementById("score").textContent = state.score;
+  document.getElementById("timer").textContent = Math.ceil(state.timeLeft);
+  document.getElementById("combo").textContent = "x" + state.combo;
+  document.getElementById("orders").textContent = state.orders;
+  const fill = document.getElementById("timefill");
+  fill.style.width = Math.max(0, state.timeLeft/60*100) + "%";
+  fill.classList.toggle("low", state.timeLeft <= 10);
+  // Time colour stages (fraction of the 60s round; +2s bonuses can push
+  // timeLeft above 60, which still counts as green):
+  // green >50% (>30s), yellow 33-50% (20-30s), orange 15-33% (9-20s), red <15% (<9s).
+  const pct = state.timeLeft / 60;
+  const stage = pct > 0.5 ? "green" : pct > 0.33 ? "yellow" : pct >= 0.15 ? "orange" : "red";
+  const timerEl = document.getElementById("timer");
+  ["green","yellow","orange","red"].forEach(s=>{
+    fill.classList.remove("stage-" + s);
+    timerEl.classList.remove("stage-" + s);
+  });
+  fill.classList.add("stage-" + stage);
+  timerEl.classList.add("stage-" + stage);
+}
+
+// --- Falling ingredients ---
+function spawnItem(forceKey){
+  // Attract mode: before the game starts the field is live behind the
+  // tap-to-start prompt, so items fall (and are NOT collectable) there too.
+  if(!state || state.paused) return;
+  if(!state.running && !state.attract) return;
+  if(state.falling.length >= 7) return;
+  // 45% next-needed ingredient (findable), otherwise a random decoy.
+  let key = forceKey;
+  if(!key){
+    const need = state.dish.steps[state.step];
+    key = Math.random() < 0.45 ? need : ALL_INGS[Math.floor(Math.random()*ALL_INGS.length)];
+  }
+  const el = document.createElement("div");
+  el.className = "fall"; el.dataset.ing = key;
+  el.innerHTML = '<span class="em">'+ING[key].e+'</span>'; // bare emoji only: no disc, no label
+  const x = 8 + Math.random()*84; // % across the field
+  const item = {el, key, x, y:-70, vy:55 + Math.random()*35, sway:Math.random()*Math.PI*2, dead:false};
+  el.style.left = x + "%";
+  el.style.top = "-70px";
+  // No tap handler: collecting is swipe-only (see swipe handlers below).
+  field.appendChild(el);
+  state.falling.push(item);
+}
+function removeItem(item){
+  item.dead = true;
+  const i = state.falling.indexOf(item);
+  if(i >= 0) state.falling.splice(i, 1);
+  if(item.el.parentNode) item.el.remove();
+}
+// --- Cut / splash FX (canvas particles + slash trail, capped counts) ---
+const fxCanvas = document.getElementById("fx");
+const fxCtx = fxCanvas.getContext("2d");
+let particles = [];   // {x,y,vx,vy,life,maxLife,size,color,shape}
+let slashPts = [];     // {x,y,t} fading slash trail
+const ING_COLOR = {bun:"#e8c07a",patty:"#8a5a2b",cheese:"#ffd23f",dough:"#f2e3c6",sauce:"#d94f3d",lettuce:"#7bc96f",tomato:"#ff4d4d",cucumber:"#4caf50",shell:"#f2c14e",beef:"#a0522d",salsa:"#e25822",pasta:"#f5d76e",egg:"#fff3b0",bacon:"#e2725b"};
+function sizeFx(){
+  const r = field.getBoundingClientRect();
+  fxCanvas.width = Math.max(1, Math.round(r.width));
+  fxCanvas.height = Math.max(1, Math.round(r.height));
+}
+function fxPos(clientX, clientY){
+  const r = field.getBoundingClientRect();
+  return {x: clientX - r.left, y: clientY - r.top};
+}
+function splashCorrect(key, clientX, clientY){
+  const p = fxPos(clientX, clientY);
+  const col = ING_COLOR[key] || "#ffd23f";
+  // Item splits in two: two emoji halves fly apart and fade.
+  [-1, 1].forEach(dir=>{
+    const h = document.createElement("div");
+    h.className = "half"; h.textContent = ING[key].e;
+    h.style.left = (p.x - 17) + "px"; h.style.top = (p.y - 17) + "px";
+    field.appendChild(h);
+    let vx = dir * (90 + Math.random()*60), vy = -110 - Math.random()*60, rot = dir * 160, life = 0;
+    const iv = setInterval(()=>{
+      life += 16;
+      const k = life/450;
+      h.style.transform = "translate(" + (vx*life/1000) + "px," + (vy*life/1000 + 320*life*life/1000000) + "px) rotate(" + (rot*k) + "deg)";
+      h.style.opacity = String(Math.max(0, 1 - k));
+      if(life >= 450){ clearInterval(iv); h.remove(); }
+    }, 16);
+  });
+  // Firework sparkles + juice droplets — bigger explosive burst:
+  // 36 multi-colour sparks, 12 droplets, 24 swirling sparks and
+  // 2 expanding rings (capped at 250 particles total).
+  const SPARK_COLORS = ["#ffe259","#ffffff",col,"#ff9a3c","#ff5b9e","#4de3ff","#7dff8a","#ff9f1c"];
+  for(let i=0;i<36;i++){
+    const a = Math.random()*Math.PI*2, sp = 110 + Math.random()*280;
+    particles.push({x:p.x, y:p.y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 60, life:0, maxLife:500+Math.random()*350, size:2+Math.random()*3.5, color:SPARK_COLORS[i%SPARK_COLORS.length], shape:"spark"});
+  }
+  for(let i=0;i<12;i++){
+    const a = Math.random()*Math.PI*2, sp = 40 + Math.random()*110;
+    particles.push({x:p.x, y:p.y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp + 40, life:0, maxLife:500+Math.random()*200, size:4+Math.random()*4, color:col, shape:"drop"});
+  }
+  // Colour swirl: sparks orbiting outward in a widening spiral.
+  for(let i=0;i<24;i++){
+    const a = (i/24)*Math.PI*2 + Math.random()*0.4;
+    particles.push({x:p.x, y:p.y, vx:0, vy:0, life:0, maxLife:650+Math.random()*350, size:2.5+Math.random()*3, color:SPARK_COLORS[i%SPARK_COLORS.length], shape:"swirl", cx:p.x, cy:p.y, ang:a, rad:10+Math.random()*14, vr:130+Math.random()*140, va:(Math.random()<0.5?-1:1)*(2.5+Math.random()*3.5)});
+  }
+  // Expanding rings.
+  for(let i=0;i<2;i++){
+    particles.push({x:p.x, y:p.y, vx:0, vy:0, life:0, maxLife:420+i*180, size:3, color:i===0?"#ffffff":SPARK_COLORS[i%SPARK_COLORS.length], shape:"ring", rad:6, vr:260+i*60});
+  }
+  if(particles.length > 250) particles.splice(0, particles.length - 250);
+}
+function splashWrong(clientX, clientY){
+  const p = fxPos(clientX, clientY);
+  // Grey cloud / puff, not fireworks (capped: 8 puffs).
+  for(let i=0;i<8;i++){
+    const a = Math.random()*Math.PI*2, sp = 20 + Math.random()*50;
+    particles.push({x:p.x + Math.cos(a)*8, y:p.y + Math.sin(a)*8, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 25, life:0, maxLife:600+Math.random()*300, size:10+Math.random()*12, color:"#9a9a9a", shape:"cloud"});
+  }
+  if(particles.length > 160) particles.splice(0, particles.length - 160);
+}
+function drawFx(dt){
+  sizeFx();
+  fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+  // Slash trail: fading white line through recent swipe points.
+  const now = performance.now();
+  slashPts = slashPts.filter(pt => now - pt.t < 220);
+  if(slashPts.length > 1){
+    fxCtx.lineCap = "round"; fxCtx.lineJoin = "round";
+    for(let i=1;i<slashPts.length;i++){
+      const a = slashPts[i], b = slashPts[i-1];
+      const age = (now - a.t) / 220;
+      fxCtx.strokeStyle = "rgba(255,255,255," + (0.95*(1-age)).toFixed(2) + ")";
+      fxCtx.lineWidth = 7 * (1 - age) + 2;
+      fxCtx.beginPath(); fxCtx.moveTo(b.x, b.y); fxCtx.lineTo(a.x, a.y); fxCtx.stroke();
+    }
+  }
+  // Particles.
+  for(const pt of particles){
+    pt.life += dt*1000;
+    const k = 1 - pt.life/pt.maxLife;
+    if(pt.shape === "swirl"){
+      // Orbit outward in a widening spiral around its origin.
+      pt.ang += pt.va * dt;
+      pt.rad += pt.vr * dt;
+      pt.x = pt.cx + Math.cos(pt.ang) * pt.rad;
+      pt.y = pt.cy + Math.sin(pt.ang) * pt.rad;
+      fxCtx.globalAlpha = Math.max(0, k);
+      fxCtx.fillStyle = pt.color;
+      fxCtx.beginPath(); fxCtx.arc(pt.x, pt.y, pt.size * k + 0.5, 0, Math.PI*2); fxCtx.fill();
+      continue;
+    }
+    if(pt.shape === "ring"){
+      pt.rad += pt.vr * dt;
+      fxCtx.globalAlpha = Math.max(0, k * 0.9);
+      fxCtx.strokeStyle = pt.color;
+      fxCtx.lineWidth = Math.max(1, 4 * k);
+      fxCtx.beginPath(); fxCtx.arc(pt.x, pt.y, pt.rad, 0, Math.PI*2); fxCtx.stroke();
+      continue;
+    }
+    pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 260 * dt;
+    if(pt.shape === "cloud"){
+      fxCtx.globalAlpha = Math.max(0, k * 0.55);
+      fxCtx.fillStyle = pt.color;
+      fxCtx.beginPath(); fxCtx.arc(pt.x, pt.y, pt.size * (1 + (1-k)), 0, Math.PI*2); fxCtx.fill();
+    } else {
+      fxCtx.globalAlpha = Math.max(0, k);
+      fxCtx.fillStyle = pt.color;
+      fxCtx.beginPath(); fxCtx.arc(pt.x, pt.y, pt.size * k + 0.5, 0, Math.PI*2); fxCtx.fill();
+    }
+  }
+  fxCtx.globalAlpha = 1;
+  particles = particles.filter(pt => pt.life < pt.maxLife);
+}
+
+function collect(key, el, clientX, clientY){
+  if(!state || !state.running || state.paused) return;
+  const item = state.falling.find(f=>f.el === el);
+  if(!item || item.dead) return;
+  state.taps++;
+  const need = state.dish.steps[state.step];
+  if(key === need){
+    state.correct++;
+    state.step++;
+    sfx.crunch();
+    splashCorrect(key, clientX, clientY);
+    removeItem(item);
+    if(state.step >= state.dish.steps.length){
+      const pts = 100 + (state.combo-1)*25;
+      state.score += pts; state.orders++;
+      state.combo = Math.min(state.combo+1, 8);
+      if(state.combo > state.bestCombo) state.bestCombo = state.combo;
+      state.timeLeft = Math.min(state.timeLeft + 2, 99);
+      setMsg("✅ " + state.dish.name + " served! +" + pts + " pts, +2s!");
+      sfx.done();
+      newOrder(); // field persists — other falling items keep gliding down
+    } else {
+      setMsg("Nice! Next: " + ING[state.dish.steps[state.step]].label);
+      renderSteps();
+    }
+  } else {
+    state.score = Math.max(0, state.score - 25);
+    state.combo = 1;
+    // WRONG-CUT TIME PENALTY: -3 seconds as well as -25 pts / combo reset.
+    // Clamped at zero; if the penalty ends the round, the game ends normally.
+    state.timeLeft = Math.max(0, state.timeLeft - 3);
+    sfx.wrong();
+    splashWrong(clientX, clientY);
+    const bin = document.getElementById("bin");
+    bin.classList.remove("binned"); void bin.offsetWidth; bin.classList.add("binned");
+    setMsg("🗑️ Wrong ingredient — " + state.dish.name + " in the bin! −25 pts, −3s", true);
+    removeItem(item);
+    if(state.timeLeft <= 0){ updateHud(); endGame(); return; }
+    newOrder(); // field persists — other falling items keep gliding down
+  }
+  updateHud();
+}
+// SWIPE ONLY — no tap to collect. A swipe is a pointer drag that moves
+// at least 12px; the slash trail follows the finger, and any falling item
+// the swipe crosses gets cut. A plain tap (down + up with no drag) collects
+// nothing.
+let swiping = false, swipeMoved = false, swipeWhooshed = false, swipeStart = null;
+function collectAt(clientX, clientY){
+  if(!state || !state.running || state.paused) return;
+  for(const item of [...state.falling]){
+    if(item.dead) continue;
+    const r = item.el.getBoundingClientRect();
+    if(clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom){
+      collect(item.key, item.el, clientX, clientY);
+      return; // one item per swipe point; next move event can cut another
+    }
+  }
+}
+field.addEventListener("pointerdown", (e)=>{
+  ensureAudio(); // iOS gesture unlock — resume the context on first tap/swipe
+  // TAP TO START: the game view IS the start screen — a tap anywhere on
+  // it (except the pause button) starts the game. No separate title screen.
+  if(state && !state.running && state.attract
+     && document.getElementById("endScreen").classList.contains("hidden")
+     && document.getElementById("pauseScreen").classList.contains("hidden")){
+    if(e.target && e.target.closest && e.target.closest("#pauseBtn")) return;
+    e.preventDefault();
+    startGame();
+    return;
+  }
+  e.preventDefault();
+  swiping = true; swipeMoved = false; swipeWhooshed = false;
+  swipeStart = {x: e.clientX, y: e.clientY};
+  const p = fxPos(e.clientX, e.clientY);
+  slashPts.push({x: p.x, y: p.y, t: performance.now()});
+});
+field.addEventListener("pointermove", (e)=>{
+  if(!swiping) return;
+  const dx = e.clientX - swipeStart.x, dy = e.clientY - swipeStart.y;
+  if(Math.hypot(dx, dy) >= 12 && !swipeMoved){
+    swipeMoved = true;
+    // SLASH WHOOSH ON EVERY SWIPE ATTEMPT: fired here in the swipe
+    // handler the moment a drag crosses the 12px cut threshold — even
+    // if it hits nothing. (Cut sounds are separate, in collect().)
+    if(!swipeWhooshed){ swipeWhooshed = true; sfx.slash(); }
+  }
+  if(!swipeMoved) return; // not a swipe yet — tap alone collects nothing
+  const p = fxPos(e.clientX, e.clientY);
+  slashPts.push({x: p.x, y: p.y, t: performance.now()});
+  collectAt(e.clientX, e.clientY);
+});
+window.addEventListener("pointerup", ()=>{ swiping = false; swipeMoved = false; swipeWhooshed = false; swipeStart = null; });
+window.addEventListener("pointercancel", ()=>{ swiping = false; swipeMoved = false; swipeWhooshed = false; swipeStart = null; });
+
+// Animation loop: gentle fall + spawn pacing.
+let lastTs = null;
+function frame(ts){
+  requestAnimationFrame(frame);
+  if(!state){ lastTs = ts; return; }
+  if(lastTs === null) lastTs = ts;
+  const dt = Math.min((ts - lastTs)/1000, 0.05);
+  lastTs = ts;
+  drawFx(dt); // slash trail + particles animate even while paused
+  if(state.paused) return;
+  if(!state.running && !state.attract) return; // ended: field stays cleared
+  const h = field.clientHeight || 340;
+  for(const item of [...state.falling]){
+    item.y += item.vy * (state.speedFactor || 1) * dt;
+    item.sway += dt * 1.5;
+    const xOff = Math.sin(item.sway) * 8;
+    item.el.style.transform = "translate(" + xOff + "px," + item.y + "px)";
+    if(item.y > h + 80) removeItem(item); // fell past the bottom: no penalty
+  }
+  state.spawnIn -= dt*1000;
+  if(state.spawnIn <= 0){
+    spawnItem();
+    state.spawnIn = Math.max(300, (650 + Math.random()*250) / (state.speedFactor || 1));
+  }
+}
+requestAnimationFrame(frame);
+
+function tick(){
+  if(!state || !state.running || state.paused) return;
+  state.timeLeft -= 0.1;
+  // GRADUAL SPEED-UP: fall speed ramps smoothly 1.0x -> ~3.5x over the 60s.
+  const elapsed = Math.max(0, 60 - state.timeLeft);
+  state.speedFactor = 1 + (elapsed / 60) * 2.5;
+  if(state.timeLeft <= 10.5 && state.timeLeft > 0 && Math.abs(state.timeLeft % 1) < 0.11) sfx.tick();
+  if(state.timeLeft <= 0){ state.timeLeft = 0; updateHud(); endGame(); return; }
+  updateHud();
+}
+function startGame(){
+  ensureAudio();
+  state = {score:0, timeLeft:60, combo:1, bestCombo:1, orders:0, taps:0, correct:0, step:0, dish:null, running:true, paused:false, falling:[], spawnIn:600, timerId:null, speedFactor:1, attract:false};
+  state.timerId = setInterval(tick, 100);
+  document.getElementById("tapStart").classList.add("hidden");
+  document.getElementById("endScreen").classList.add("hidden");
+  document.getElementById("pauseScreen").classList.add("hidden");
+  document.getElementById("pauseBtn").textContent = "⏸";
+  clearField(); // fresh game only — mid-game orders never clear the field
+  setMsg("");
+  newOrder(); updateHud();
+}
+function endGame(){
+  state.running = false; state.attract = false;
+  clearInterval(state.timerId);
+  clearField();
+  const acc = state.taps ? Math.round(state.correct/state.taps*100) : 0;
+  const grade = state.score >= 1200 ? "S" : state.score >= 900 ? "A" : state.score >= 600 ? "B" : state.score >= 300 ? "C" : "D";
+  document.getElementById("finalScore").textContent = state.score;
+  document.getElementById("finalOrders").textContent = state.orders;
+  document.getElementById("finalCombo").textContent = "x" + state.bestCombo;
+  document.getElementById("finalAcc").textContent = acc + "%";
+  document.getElementById("finalGrade").textContent = grade;
+  document.getElementById("endScreen").classList.remove("hidden");
+  sfx.done();
+}
+function togglePause(){
+  if(!state || !state.running) return;
+  state.paused = !state.paused;
+  document.getElementById("pauseScreen").classList.toggle("hidden", !state.paused);
+  document.getElementById("pauseBtn").textContent = state.paused ? "▶" : "⏸";
+}
+document.getElementById("againBtn").addEventListener("click", ()=>{ ensureAudio(); startGame(); });
+document.getElementById("pauseRestartBtn").addEventListener("click", startGame);
+document.getElementById("pauseBtn").addEventListener("click", togglePause);
+document.getElementById("resumeBtn").addEventListener("click", ()=>{ ensureAudio(); togglePause(); });
+document.addEventListener("keydown", (e)=>{
+  if(e.key === "p" || e.key === "P") togglePause();
+  if(e.key === "Enter" && state && !state.running && state.attract) startGame();
+});
+// Attract mode: the game view IS the start screen — a preview order shows
+// and ingredients fall behind the tap-to-start prompt until the first tap.
+state = {score:0, timeLeft:60, combo:1, bestCombo:1, orders:0, taps:0, correct:0, step:0, dish:null, running:false, paused:false, falling:[], spawnIn:600, timerId:null, speedFactor:1, attract:true};
+newOrder(); updateHud();
+</script>
+</body>
+</html>
