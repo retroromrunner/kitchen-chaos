@@ -73,6 +73,7 @@
 </head>
 <body>
 <div id="app">
+  <audio id="bgMusic" src="music-v4.mp3" loop preload="auto"></audio>
   <div id="field">
     <canvas id="fx"></canvas>
     <div id="topOverlay">
@@ -142,6 +143,18 @@ const ALL_INGS = Object.keys(ING);
 
 let audioCtx = null;
 let noiseBuf = null;
+// Background music (Cori's track, added Nov 12, 2026 — here.now playtest
+// ONLY; the submitted itch/AI Games Jam build was NOT changed): a 24s
+// loop trimmed from her 30s WAV (last ~3s were a fade to silence).
+// Plays at modest volume under the Web Audio SFX. Starts on the
+// tap-to-start gesture (iOS audio unlock), pauses with the game,
+// stops on the results screen, restarts on restart.
+const bgMusic = document.getElementById("bgMusic");
+if(bgMusic){ bgMusic.volume = 1.0; bgMusic.loop = true; }
+function startMusic(){ try{ if(bgMusic){ bgMusic.currentTime = 0; const p = bgMusic.play(); if(p) p.catch(()=>{}); } }catch(e){} }
+function pauseMusic(){ try{ if(bgMusic) bgMusic.pause(); }catch(e){} }
+function resumeMusic(){ try{ if(bgMusic){ const p = bgMusic.play(); if(p) p.catch(()=>{}); } }catch(e){} }
+function stopMusic(){ try{ if(bgMusic){ bgMusic.pause(); bgMusic.currentTime = 0; } }catch(e){} }
 // Audio unlock (Nov 12): Cori confirmed sound IS there — it was not broken.
 // ensureAudio() is kept as the robust iOS unlock: on iOS Safari a new
 // AudioContext can start "suspended", so this creates the context AND
@@ -588,6 +601,7 @@ function tick(){
 }
 function startGame(){
   ensureAudio();
+  startMusic();
   state = {score:0, timeLeft:60, combo:1, bestCombo:1, orders:0, taps:0, correct:0, step:0, dish:null, running:true, paused:false, falling:[], spawnIn:600, timerId:null, speedFactor:1, attract:false};
   state.timerId = setInterval(tick, 100);
   document.getElementById("tapStart").classList.add("hidden");
@@ -610,11 +624,13 @@ function endGame(){
   document.getElementById("finalAcc").textContent = acc + "%";
   document.getElementById("finalGrade").textContent = grade;
   document.getElementById("endScreen").classList.remove("hidden");
+  stopMusic();
   sfx.done();
 }
 function togglePause(){
   if(!state || !state.running) return;
   state.paused = !state.paused;
+  if(state.paused) pauseMusic(); else resumeMusic();
   document.getElementById("pauseScreen").classList.toggle("hidden", !state.paused);
   document.getElementById("pauseBtn").textContent = state.paused ? "▶" : "⏸";
 }
