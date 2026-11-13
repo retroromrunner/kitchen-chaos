@@ -8,7 +8,7 @@ The lunch rush is on! Ingredients rain down the kitchen — swipe through them l
 
 - **Play in your browser:** [retroromrunner.itch.io/kitchen-chaos](https://retroromrunner.itch.io/kitchen-chaos)
 - **Also playable here:** [yearly-quarry-hh7v.here.now](https://yearly-quarry-hh7v.here.now/)
-- **Or open `index.html` in any browser** — the whole game is one self-contained file, no build step, no downloads.
+- **Or open `index.html` in any browser** — no build step, no downloads (keep `music-v4.mp3` beside it for the background music).
 
 ## How to play
 
